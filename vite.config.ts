@@ -20,7 +20,8 @@ export default defineConfig({
   plugins: [
     react(),
     svgr(),
-    compression({ include: /\.js$/i, deleteOriginalAssets: true }),
+    // not needed for gh pages - auto-gzips
+    // compression({ include: /\.js$/i, deleteOriginalAssets: true }),
     VitePWA({
       workbox: {
         globPatterns: [

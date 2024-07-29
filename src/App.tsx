@@ -1,13 +1,19 @@
-import  { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import NotyfContext from './NotyfContext.js';
+import { Notyf } from 'notyf';
+
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
+import 'notyf/notyf.min.css';
 
 function App() {
   const [count, setCount] = useState(0)
   const [supportsBluetooth, setSupportsBluetooth] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(true);
   const [batteryLevel, setBatteryLevel] = useState(null);
+
+  const notyf: Notyf = useContext(NotyfContext);
 
   // When the component mounts, check that the browser supports Bluetooth
   useEffect(() => {
@@ -18,66 +24,57 @@ function App() {
   }, []);
 
 
-  /**
- * Let the user know when their device has been disconnected.
- */
-  const onDisconnected = (event: Event) => {
-    alert(`The device ${event.target} is disconnected`);
-    setIsDisconnected(true);
+  const logDataView = (labelOfDataSource, key, valueDataView) => {
+    const hexString = [...new Uint8Array(valueDataView.buffer)].map(b => {
+      return b.toString(16).padStart(2, '0');
+    }).join(' ');
+    const textDecoder = new TextDecoder('ascii');
+    const asciiString = textDecoder.decode(valueDataView.buffer);
+
+    notyf.success(
+      `  ${labelOfDataSource} Data: ` + key +
+      '\n    (Hex) ' + hexString +
+      '\n    (ASCII) ' + asciiString);
+
   }
 
-  /**
-     * Update the value shown on the web page when a notification is
-     * received.
-     */
-  const handleCharacteristicValueChanged = (event: Event) => {
-    console.log(event);
-    // setBatteryLevel(event.target.value.getUint8(0) + '%');
-  }
-
-  /**
-   * Attempts to connect to a Bluetooth device and subscribe to
-   * battery level readings using the battery service.
-   */
-  const connectToDeviceAndSubscribeToUpdates = async () => {
-    try {
-      // Search for Bluetooth devices that advertise a battery service
-      const device = await navigator.bluetooth
-        .requestDevice();
-        // .requestDevice({
-        //   filters: [{ services: ['battery_service'] }]
-        // });
-      setIsDisconnected(false);
-
-      // Add an event listener to detect when a device disconnects
-      device.addEventListener('gattserverdisconnected', onDisconnected);
-
-      // Try to connect to the remote GATT Server running on the Bluetooth device
-      const server = await device.gatt?.connect();
-
-      // Get the battery service from the Bluetooth device
-      const service = await server.getPrimaryService('battery_service');
-
-      // Get the battery level characteristic from the Bluetooth device
-      const characteristic = await service.getCharacteristic('battery_level');
-
-      // Subscribe to battery level notifications
-      characteristic.startNotifications();
-
-      // When the battery level changes, call a function
-      characteristic.addEventListener('characteristicvaluechanged',
-        handleCharacteristicValueChanged);
-
-      // Read the battery level value
-      const reading = await characteristic.readValue();
-
-      // Show the initial reading on the web page
-      console.log("reading.getUint8(0)",reading.getUint8(0));
-
-      //setBatteryLevel(reading.getUint8(0) + '%');
-    } catch (error) {
-      console.log(`There was an error: ${error}`);
+  // {"acceptAllAdvertisements":true}
+  const startScanForBLEDevices = async () => {
+    const options = {
+      acceptAllAdvertisements: true,
+      keepRepeatedDevices: true,
+      active: true
     }
+    try {
+      // const scan = await navigator.bluetooth.requestLEScan(options);
+
+      navigator.bluetooth.addEventListener('advertisementreceived', event => {
+        const result =
+          'Advertisement received: ' +
+          '  Device Name: ' + event.device.name +
+          '  Device ID: ' + event.device.id +
+          '  RSSI: ' + event.rssi +
+          '  TX Power: ' + event.txPower +
+          '  UUIDs: ' + event.uuids;
+        notyf.success(result);
+
+        event.manufacturerData.forEach((valueDataView, key) => {
+          logDataView('Manufacturer', key, valueDataView);
+        });
+        event.serviceData.forEach((valueDataView, key) => {
+          logDataView('Service', key, valueDataView);
+        });
+      });
+    } catch (error) {
+      console.log('Argh! ' + error);
+    }
+  };
+
+  const stopScan = () => {
+    // https://github.com/capacitor-community/bluetooth-le/blob/0ce507c207b072d84707567a98184b1c91fa5d1c/src/web.ts#L105
+    //     await this.stopLEScan();
+    console.log('stopScan');
+
   };
   return (
     <>
@@ -99,16 +96,20 @@ function App() {
         </p>
       </div>
       <div className="webble">
-        <h1>Get Device Battery Info Over Bluetooth</h1>
-        {supportsBluetooth && !isDisconnected &&
-          <p>Battery level: {batteryLevel}</p>
-        }
+        <h1>Scan for Bluetooth devices</h1>
+
         {supportsBluetooth && isDisconnected &&
-          <button onClick={connectToDeviceAndSubscribeToUpdates}>Connect to a Bluetooth device</button>
+          <button onClick={startScanForBLEDevices}>Start Scan</button>
+        }
+        {supportsBluetooth && !isDisconnected &&
+          <button onClick={stopScan}>Stop Scan</button>
         }
         {!supportsBluetooth &&
           <p>This browser doesn't support the Web Bluetooth API</p>
         }
+        <div>
+          <button onClick={() => notyf.error('Please fill out all the fields in the form')}>Notify4</button>
+        </div>
       </div>
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
@@ -117,4 +118,4 @@ function App() {
   )
 }
 
-export default App
+export default App;
